@@ -1,0 +1,167 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: demo-store-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: demostore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "127.0.0.1:5439:5432"
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demostore"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: demo-store-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:3100/ready | grep -q 'ready'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    container_name: demo-store-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "4317"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:16686/ | grep -q 'Jaeger UI'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: demo-store-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./collector/otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13133:13133"
+    depends_on:
+      jaeger:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: demo-store-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/observability/alert-rules.yaml:/etc/prometheus/rules/alert-rules.yaml:ro
+    depends_on:
+      - otel-collector
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:9090/-/ready | grep -q 'Prometheus Server is Ready'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: demo-store-product-service
+    restart: unless-stopped
+    environment:
+      PORT: 4001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/demostore
+      LOKI_PUSH_URL: http://loki:3100/loki/api/v1/push
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      METRICS_CONFIG_PATH: /app/config/observability/metrics.yaml
+      HEALTH_CONFIG_PATH: /app/config/observability/health-checks.yaml
+      TRACING_CONFIG_PATH: /app/config/observability/tracing.yaml
+    volumes:
+      - ./config/observability:/app/config/observability
+    ports:
+      - "127.0.0.1:4001:4001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      loki:
+        condition: service_healthy
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    container_name: demo-store-order-service
+    restart: unless-stopped
+    environment:
+      PORT: 4002
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/demostore
+      PRODUCT_SERVICE_URL: http://product-service:4001
+      LOKI_PUSH_URL: http://loki:3100/loki/api/v1/push
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      METRICS_CONFIG_PATH: /app/config/observability/metrics.yaml
+      HEALTH_CONFIG_PATH: /app/config/observability/health-checks.yaml
+      TRACING_CONFIG_PATH: /app/config/observability/tracing.yaml
+    volumes:
+      - ./config/observability:/app/config/observability
+    ports:
+      - "127.0.0.1:4002:4002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+      loki:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: demo-store-api-gateway
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      PRODUCT_SERVICE_URL: http://product-service:4001
+      ORDER_SERVICE_URL: http://order-service:4002
+      LOKI_PUSH_URL: http://loki:3100/loki/api/v1/push
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      METRICS_CONFIG_PATH: /app/config/observability/metrics.yaml
+      HEALTH_CONFIG_PATH: /app/config/observability/health-checks.yaml
+      TRACING_CONFIG_PATH: /app/config/observability/tracing.yaml
+    volumes:
+      - ./config/observability:/app/config/observability
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      product-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+      loki:
+        condition: service_healthy

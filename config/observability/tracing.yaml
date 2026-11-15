@@ -1,0 +1,22 @@
+# cloudpilot:tracing
+tracing:
+  enabled: true
+  service_name: api-gateway
+  propagators:
+    - tracecontext
+    - baggage
+  otlp_endpoint: http://otel-collector:4318/v1/traces
+  sample_ratio: 1.0
+
+services:
+  api-gateway:
+    enabled: true
+  product-service:
+    enabled: true
+  order-service:
+    enabled: false
+
+# Intentional Observability Gap:
+# Distributed tracing for 'order-service' is intentionally set to 'enabled: false'.
+# When order requests flow from api-gateway -> order-service, the order-service spans
+# are not emitted to Jaeger until CloudPilot's trace remediation patch activates it.

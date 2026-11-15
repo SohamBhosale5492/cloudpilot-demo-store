@@ -1,0 +1,23 @@
+{
+  "name": "cloudpilot-demo-store",
+  "version": "1.0.0",
+  "description": "Realistic microservices demo store for CloudPilot observability inspection and remediation",
+  "private": true,
+  "workspaces": [
+    "api-gateway",
+    "product-service",
+    "order-service"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=api-gateway && npm run build --workspace=product-service && npm run build --workspace=order-service",
+    "start:gateway": "npm run start --workspace=api-gateway",
+    "start:products": "npm run start --workspace=product-service",
+    "start:orders": "npm run start --workspace=order-service",
+    "test": "node --test test/*.test.js",
+    "verify": "node scripts/verify.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}

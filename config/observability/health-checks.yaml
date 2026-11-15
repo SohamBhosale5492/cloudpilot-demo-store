@@ -1,0 +1,23 @@
+# cloudpilot:health
+health_checks:
+  - service: api-gateway
+    endpoint: /health
+    interval_seconds: 10
+  - service: api-gateway
+    endpoint: /ready
+    interval_seconds: 30
+  - service: product-service
+    endpoint: /health
+    interval_seconds: 10
+  - service: product-service
+    endpoint: /ready
+    interval_seconds: 30
+  - service: order-service
+    endpoint: /health
+    interval_seconds: 10
+
+# Intentional Observability Gap:
+# The readiness endpoint '/ready' for order-service is intentionally missing from this configuration.
+# api-gateway and product-service /ready are configured above.
+# order-service /ready is absent — CloudPilot detects this as a health gap.
+# When probed, order-service /ready returns HTTP 404 with status NOT_CONFIGURED.

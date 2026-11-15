@@ -1,0 +1,25 @@
+# cloudpilot:alerts
+groups:
+  - name: store_alerts
+    rules:
+      - alert: store_gateway_high_error_rate
+        expr: rate(store_http_requests_total{status_code=~"5.."}[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+          requirement_id: store-gateway-error-alert
+        annotations:
+          summary: "API Gateway 5xx error rate exceeds 5%"
+      - alert: store_product_service_down
+        expr: up{job="product-service"} == 0
+        for: 30s
+        labels:
+          severity: warning
+          requirement_id: store-product-down-alert
+        annotations:
+          summary: "Product Service target is down"
+
+# Intentional Observability Gap:
+# The order service heartbeat alert 'store_order_service_heartbeat_alert' with requirement_id
+# 'store-order-service-alert' (expr: up{job="order-service"} == 0) is intentionally missing,
+# allowing CloudPilot to detect the missing alert rule in Prometheus /api/v1/rules.

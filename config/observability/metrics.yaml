@@ -1,0 +1,22 @@
+# cloudpilot:metrics
+metrics:
+  - name: store_http_requests_total
+    service: api-gateway
+    route: /api/products
+    method: GET
+    labels:
+      service: api-gateway
+      route: /api/products
+      method: GET
+  - name: store_product_views_total
+    service: product-service
+    route: /products
+    method: GET
+    labels:
+      service: product-service
+      route: /products
+      method: GET
+
+# Intentional Observability Gap:
+# The order placement counter 'store_orders_placed_total' for order-service route '/orders' (method: POST)
+# is intentionally absent from this configuration, allowing CloudPilot's gap engine to detect it as a gap.
