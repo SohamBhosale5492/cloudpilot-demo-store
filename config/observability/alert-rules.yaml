@@ -18,6 +18,17 @@ groups:
           requirement_id: store-product-down-alert
         annotations:
           summary: "Product Service target is down"
+  - name: cloudpilot_alerts
+    rules:
+      - alert: store_order_service_heartbeat_alert
+        expr: up{job="order-service"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          requirement_id: store_order_service_heartbeat_alert
+        annotations:
+          summary: CloudPilot alert rule for store_order_service_heartbeat_alert
+        # cloudpilot:remediated:CP-RULE-OBS-GAP-ALERT-UNCONFIGURED
 
 # Intentional Observability Gap:
 # The order service heartbeat alert 'store_order_service_heartbeat_alert' with requirement_id
