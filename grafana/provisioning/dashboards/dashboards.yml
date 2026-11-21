@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Demo Store dashboards
+    orgId: 1
+    folder: CloudPilot Demo Store
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

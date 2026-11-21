@@ -164,6 +164,28 @@ curl -X POST http://localhost:4002/chaos/payment \
 - Fields: `timestamp`, `level`, `service`, `message`, `trace_id`, `span_id`
 - Query in Loki: `{service="api-gateway"}`
 
+### CloudPilot Readiness Proof Dashboard
+
+The Compose stack includes Prometheus Blackbox Exporter and Grafana. Grafana is loopback-only at [http://127.0.0.1:3002](http://127.0.0.1:3002); its provisioned dashboard is **CloudPilot Demo Store — Observability & Remediation Proof**. Grafana uses the named `grafana_data` volume. Supply `GRAFANA_ADMIN_PASSWORD` through the local process environment; no credential is stored in this repository. Anonymous local dashboard access is Viewer-only.
+
+Prometheus probes `http://order-service:4002/ready` over the Compose network with Blackbox Exporter's `http_2xx` module. The `order-service-readiness` scrape job's `up` value reports whether Prometheus can reach the exporter; use `probe_success` to judge endpoint health. With the intentional readiness gap, expect `probe_success = 0` and `probe_http_status_code = 404`. After the health-check configuration is deployed and PostgreSQL is ready, expect `probe_success = 1` and status `200`. `probe_duration_seconds` records probe latency. Missing series remain no data.
+
+The dashboard also uses these PromQL queries:
+
+```promql
+probe_success{job="order-service-readiness"}
+probe_http_status_code{job="order-service-readiness"}
+probe_duration_seconds{job="order-service-readiness"}
+up{job="order-service"}
+sum by (status_code) (rate(store_http_requests_total{service="api-gateway"}[5m]))
+sum by (status_code) (rate(store_http_requests_total{service="order-service"}[5m]))
+sum(rate(store_http_requests_total{status_code=~"5.."}[5m]))
+sum by (product_id) (rate(store_product_views_total[5m]))
+sum by (status_code) (rate(store_http_requests_total{service="order-service",route="/orders",method="POST"}[5m]))
+```
+
+The final query describes order POST traffic; it does not imply successful-order instrumentation. `store_orders_placed_total` remains an intentional gap. Prometheus, Loki, and Jaeger are provisioned as Grafana data sources. Preserve the existing Prometheus TSDB and traces when applying monitoring-only Compose changes; Prometheus configuration changes can be loaded through its enabled lifecycle endpoint.
+
 ### Alert Rules (Prometheus)
 - `store_gateway_high_error_rate` — 5xx rate > 5% for 1 minute
 - `store_product_service_down` — `up{job="product-service"} == 0` for 30s
