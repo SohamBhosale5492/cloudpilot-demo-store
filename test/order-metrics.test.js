@@ -14,6 +14,8 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
   let prevProductUrl;
   let prevMetricsPath;
   let prevHealthPath;
+  let prevTracingPath;
+  let prevLokiUrl;
   let prevDatabaseUrl;
 
   before(async () => {
@@ -21,6 +23,8 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     prevProductUrl = process.env.PRODUCT_SERVICE_URL;
     prevMetricsPath = process.env.METRICS_CONFIG_PATH;
     prevHealthPath = process.env.HEALTH_CONFIG_PATH;
+    prevTracingPath = process.env.TRACING_CONFIG_PATH;
+    prevLokiUrl = process.env.LOKI_PUSH_URL;
     prevDatabaseUrl = process.env.DATABASE_URL;
 
     mockProductServer = http.createServer((req, res) => {
@@ -45,6 +49,8 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     process.env.PRODUCT_SERVICE_URL = `http://127.0.0.1:${mockPort}`;
     process.env.METRICS_CONFIG_PATH = path.join(rootDir, 'config/observability/metrics.yaml');
     process.env.HEALTH_CONFIG_PATH = path.join(rootDir, 'config/observability/health-checks.yaml');
+    process.env.TRACING_CONFIG_PATH = path.join(rootDir, 'config/observability/tracing.yaml');
+    delete process.env.LOKI_PUSH_URL;
     delete process.env.DATABASE_URL;
 
     const orderModule = require('../order-service/dist/index.js');
@@ -63,6 +69,8 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     if (prevProductUrl === undefined) delete process.env.PRODUCT_SERVICE_URL; else process.env.PRODUCT_SERVICE_URL = prevProductUrl;
     if (prevMetricsPath === undefined) delete process.env.METRICS_CONFIG_PATH; else process.env.METRICS_CONFIG_PATH = prevMetricsPath;
     if (prevHealthPath === undefined) delete process.env.HEALTH_CONFIG_PATH; else process.env.HEALTH_CONFIG_PATH = prevHealthPath;
+    if (prevTracingPath === undefined) delete process.env.TRACING_CONFIG_PATH; else process.env.TRACING_CONFIG_PATH = prevTracingPath;
+    if (prevLokiUrl === undefined) delete process.env.LOKI_PUSH_URL; else process.env.LOKI_PUSH_URL = prevLokiUrl;
     if (prevDatabaseUrl !== undefined) process.env.DATABASE_URL = prevDatabaseUrl;
   });
 
@@ -117,7 +125,8 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     const healthRes = await fetch(`${baseUrl}/health`);
     assert.strictEqual(healthRes.status, 200);
     const readyRes = await fetch(`${baseUrl}/ready`);
-    assert.strictEqual(readyRes.status, 404);
+    assert.strictEqual(readyRes.status, 200);
+    assert.strictEqual((await readyRes.json()).status, 'READY');
 
     const metricsRes = await fetch(`${baseUrl}/metrics`);
     assert.strictEqual(metricsRes.status, 200);

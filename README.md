@@ -88,7 +88,7 @@ POST /orders                     # Create order with payment processing
 GET  /orders/:id                 # Get order
 GET  /orders                     # List orders (last 50)
 GET  /health                     # Health check
-GET  /ready                      # ⚠ Returns 404 NOT_CONFIGURED (intentional gap)
+GET  /ready                      # 200 when PostgreSQL is healthy, 503 when unavailable
 GET  /metrics                    # Prometheus metrics
 POST /chaos/payment              # Toggle payment chaos: { active: true/false }
 ```
@@ -168,7 +168,7 @@ curl -X POST http://localhost:4002/chaos/payment \
 
 The Compose stack includes Prometheus Blackbox Exporter and Grafana. Grafana is loopback-only at [http://127.0.0.1:3002](http://127.0.0.1:3002); its provisioned dashboard is **CloudPilot Demo Store — Observability & Remediation Proof**. Grafana uses the named `grafana_data` volume. Supply `GRAFANA_ADMIN_PASSWORD` through the local process environment; no credential is stored in this repository. Anonymous local dashboard access is Viewer-only.
 
-Prometheus probes `http://order-service:4002/ready` over the Compose network with Blackbox Exporter's `http_2xx` module. The `order-service-readiness` scrape job's `up` value reports whether Prometheus can reach the exporter; use `probe_success` to judge endpoint health. With the intentional readiness gap, expect `probe_success = 0` and `probe_http_status_code = 404`. After the health-check configuration is deployed and PostgreSQL is ready, expect `probe_success = 1` and status `200`. `probe_duration_seconds` records probe latency. Missing series remain no data.
+Prometheus probes `http://order-service:4002/ready` over the Compose network with Blackbox Exporter's `http_2xx` module. The `order-service-readiness` scrape job's `up` value reports whether Prometheus can reach the exporter. Use `probe_success` to judge endpoint health. Before the CloudPilot readiness registration, the probe returned HTTP 404. With the registration deployed, expect `probe_success = 1` and HTTP 200 when PostgreSQL is healthy, or `probe_success = 0` and HTTP 503 when PostgreSQL is unavailable. `probe_duration_seconds` records probe latency. Missing series remain no data.
 
 The dashboard also uses these PromQL queries:
 
@@ -198,9 +198,10 @@ These gaps are **deliberately introduced** so CloudPilot can detect and remediat
 | Gap # | Signal | Description | Evidence |
 |-------|--------|-------------|----------|
 | 1 | **Metric** | `store_orders_placed_total` metric for Order Service is absent from `config/observability/metrics.yaml` | Order Service never registers the counter; Prometheus has no order placement data |
-| 2 | **Health** | `order-service /ready` endpoint is absent from `config/observability/health-checks.yaml` | `GET /ready` on Order Service returns `HTTP 404 NOT_CONFIGURED` |
 | 3 | **Alert** | Order Service heartbeat alert (`up{job="order-service"} == 0`) is absent from `config/observability/alert-rules.yaml` | Prometheus /api/v1/rules shows no order-service alert rule |
 | 4 | **Trace** | Order Service tracing is set to `enabled: false` in `config/observability/tracing.yaml` | Jaeger shows no spans from `order-service`; gateway→order trace chain is broken |
+
+CloudPilot remediated the Order Service readiness registration in `config/observability/health-checks.yaml`.
 
 > **Note:** Log remediation is explicitly unsupported by CloudPilot and will not produce a false-positive resolution.
 
