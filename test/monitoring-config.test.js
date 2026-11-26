@@ -21,6 +21,18 @@ test('Blackbox readiness scrape targets the real Order Service endpoint', () => 
   assert.match(blackbox, /prober:\s*http/);
 });
 
+test('Prometheus loads the remediated Order Service heartbeat rule file', () => {
+  const prometheus = read('prometheus/prometheus.yml');
+  const compose = read('docker-compose.yml');
+  const alerts = read('config/observability/alert-rules.yaml');
+
+  assert.match(prometheus, /rule_files:\s*\n\s*- \/etc\/prometheus\/rules\/alert-rules\.yaml/);
+  assert.match(compose,
+    /\.\/config\/observability\/alert-rules\.yaml:\/etc\/prometheus\/rules\/alert-rules\.yaml:ro/);
+  assert.match(alerts, /alert:\s*store_order_service_heartbeat_alert/);
+  assert.match(alerts, /expr:\s*up\{job=["']order-service["']\}\s*==\s*0/);
+});
+
 test('Grafana dashboard uses real metrics and preserves unhealthy/no-data semantics', () => {
   const dashboard = JSON.parse(read('grafana/dashboards/cloudpilot-demo-store.json'));
   const byTitle = new Map(dashboard.panels.map((panel) => [panel.title, panel]));

@@ -18,8 +18,14 @@ groups:
           requirement_id: store-product-down-alert
         annotations:
           summary: "Product Service target is down"
-
-# Intentional Observability Gap:
-# The order service heartbeat alert 'store_order_service_heartbeat_alert' with requirement_id
-# 'store-order-service-alert' (expr: up{job="order-service"} == 0) is intentionally missing,
-# allowing CloudPilot to detect the missing alert rule in Prometheus /api/v1/rules.
+  - name: cloudpilot_alerts
+    rules:
+      - alert: store_order_service_heartbeat_alert
+        expr: up{job="order-service"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          requirement_id: store_order_service_heartbeat_alert
+        annotations:
+          summary: "Order Service target is down"
+        # cloudpilot:remediated:CP-RULE-OBS-GAP-ALERT-UNCONFIGURED
