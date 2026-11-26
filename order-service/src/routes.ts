@@ -24,7 +24,6 @@ export function createOrderRoutes(logger: Logger): Router {
   router.get('/ready', async (req: Request, res: Response) => {
     const isConfigured = isHealthEndpointConfigured('order-service', '/ready');
     if (!isConfigured) {
-      // Intentional observability gap: readiness check missing from health-checks.yaml
       return res.status(404).json({
         status: 'NOT_CONFIGURED',
         error: 'Readiness check not configured in health-checks.yaml for order-service',
