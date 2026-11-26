@@ -15,6 +15,10 @@ health_checks:
   - service: order-service
     endpoint: /health
     interval_seconds: 10
+  - service: order-service
+    endpoint: /ready
+    interval_seconds: 30
+    # cloudpilot:remediated:CP-RULE-OBS-GAP-HEALTH-PROBE
 
 # Intentional Observability Gap:
 # The readiness endpoint '/ready' for order-service is intentionally missing from this configuration.
