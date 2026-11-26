@@ -189,6 +189,7 @@ The final query describes order POST traffic; it does not imply successful-order
 ### Alert Rules (Prometheus)
 - `store_gateway_high_error_rate` — 5xx rate > 5% for 1 minute
 - `store_product_service_down` — `up{job="product-service"} == 0` for 30s
+- `store_order_service_heartbeat_alert` — `up{job="order-service"} == 0` for 1 minute
 - View: http://localhost:9090/alerts
 
 ## Intentional Observability Gaps (for CloudPilot)
@@ -198,10 +199,10 @@ These gaps are **deliberately introduced** so CloudPilot can detect and remediat
 | Gap # | Signal | Description | Evidence |
 |-------|--------|-------------|----------|
 | 1 | **Metric** | `store_orders_placed_total` metric for Order Service is absent from `config/observability/metrics.yaml` | Order Service never registers the counter; Prometheus has no order placement data |
-| 3 | **Alert** | Order Service heartbeat alert (`up{job="order-service"} == 0`) is absent from `config/observability/alert-rules.yaml` | Prometheus /api/v1/rules shows no order-service alert rule |
 | 4 | **Trace** | Order Service tracing is set to `enabled: false` in `config/observability/tracing.yaml` | Jaeger shows no spans from `order-service`; gateway→order trace chain is broken |
 
-CloudPilot remediated the Order Service readiness registration in `config/observability/health-checks.yaml`.
+CloudPilot remediated the Order Service readiness registration in `config/observability/health-checks.yaml`
+and the heartbeat alert in `config/observability/alert-rules.yaml`.
 
 > **Note:** Log remediation is explicitly unsupported by CloudPilot and will not produce a false-positive resolution.
 

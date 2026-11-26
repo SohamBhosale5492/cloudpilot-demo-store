@@ -16,3 +16,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Validate Prometheus alert rules
+        run: >-
+          docker run --rm
+          -v "$PWD/config/observability:/rules:ro"
+          --entrypoint promtool
+          prom/prometheus:v2.51.0
+          check rules /rules/alert-rules.yaml

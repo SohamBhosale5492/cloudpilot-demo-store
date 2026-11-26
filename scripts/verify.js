@@ -67,11 +67,8 @@ async function verifyConfigs() {
     const parsed = yaml.parse(fs.readFileSync(healthFile, 'utf8'));
     const checks = parsed.health_checks || [];
     const hasOrderReady = checks.some((c) => c.service === 'order-service' && c.endpoint === '/ready');
-    logGap(
-      'Health Gap',
-      !hasOrderReady,
-      'order-service /ready is absent in health-checks.yaml (Probes fail with 404)'
-    );
+    logCheck('Order Service /ready registration', hasOrderReady,
+      hasOrderReady ? 'registered in health-checks.yaml' : 'missing from health-checks.yaml');
   }
 
   // Tracing
@@ -96,13 +93,12 @@ async function verifyConfigs() {
 
   if (alertExists) {
     const parsed = yaml.parse(fs.readFileSync(alertFile, 'utf8'));
-    const rules = parsed.groups?.[0]?.rules || [];
-    const hasOrderHeartbeat = rules.some((r) => r.alert?.includes('order_service'));
-    logGap(
-      'Alert Gap',
-      !hasOrderHeartbeat,
-      'order-service heartbeat alert rule is absent in alert-rules.yaml'
-    );
+    const rules = (parsed.groups || []).flatMap((group) => group.rules || []);
+    const orderHeartbeat = rules.find((rule) => rule.alert === 'store_order_service_heartbeat_alert');
+    const validOrderHeartbeat = orderHeartbeat?.expr === 'up{job="order-service"} == 0'
+      && orderHeartbeat?.labels?.severity === 'warning';
+    logCheck('Order Service heartbeat alert', validOrderHeartbeat,
+      validOrderHeartbeat ? 'loaded configuration is present' : 'missing or invalid alert configuration');
   }
 }
 
@@ -117,7 +113,7 @@ async function verifyLiveEndpoints() {
     { name: 'Product Service Ready', url: 'http://127.0.0.1:4001/ready', expectedStatus: 200 },
     { name: 'Product Service Metrics', url: 'http://127.0.0.1:4001/metrics', expectedStatus: 200 },
     { name: 'Order Service Health', url: 'http://127.0.0.1:4002/health', expectedStatus: 200 },
-    { name: 'Order Service Ready (Expected Gap: 404)', url: 'http://127.0.0.1:4002/ready', expectedStatus: 404 },
+    { name: 'Order Service Ready', url: 'http://127.0.0.1:4002/ready', expectedStatus: 200 },
     { name: 'Order Service Metrics', url: 'http://127.0.0.1:4002/metrics', expectedStatus: 200 },
     { name: 'Prometheus Server', url: 'http://127.0.0.1:9090/-/ready', expectedStatus: 200, optional: true },
     { name: 'Jaeger Query UI', url: 'http://127.0.0.1:16686/', expectedStatus: 200, optional: true },

@@ -41,13 +41,19 @@ describe('CloudPilot Demo Store - Unit and Integration Tests', () => {
       assert.strictEqual(content.services?.['order-service']?.enabled, false, 'order-service tracing must be disabled');
     });
 
-    test('alert-rules.yaml has intentional gap: order-service heartbeat alert is missing', () => {
+    test('alert-rules.yaml contains the remediated Order Service heartbeat alert exactly once', () => {
       const alertPath = path.join(rootDir, 'config/observability/alert-rules.yaml');
       assert.ok(fs.existsSync(alertPath), 'alert-rules.yaml should exist');
       const content = yaml.parse(fs.readFileSync(alertPath, 'utf8'));
-      const rules = content.groups?.[0]?.rules || [];
-      const orderAlert = rules.find((r) => r.alert?.includes('order_service'));
-      assert.strictEqual(orderAlert, undefined, 'order-service heartbeat alert must be absent');
+      const rules = (content.groups || []).flatMap((group) => group.rules || []);
+      const orderAlerts = rules.filter((rule) => rule.alert === 'store_order_service_heartbeat_alert');
+      assert.strictEqual(orderAlerts.length, 1, 'heartbeat alert must be declared exactly once');
+      assert.strictEqual(orderAlerts[0].expr, 'up{job="order-service"} == 0');
+      assert.strictEqual(orderAlerts[0].for, '1m');
+      assert.deepStrictEqual(orderAlerts[0].labels, {
+        severity: 'warning',
+        requirement_id: 'store_order_service_heartbeat_alert',
+      });
     });
   });
 
