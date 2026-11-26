@@ -16,6 +16,14 @@ metrics:
       service: product-service
       route: /products
       method: GET
+  - name: store_http_requests_total
+    service: order-service
+    route: /orders
+    method: POST
+    labels:
+      service: order-service
+      route: /orders
+      method: POST
 
 # Intentional Observability Gap:
 # The order placement counter 'store_orders_placed_total' for order-service route '/orders' (method: POST)

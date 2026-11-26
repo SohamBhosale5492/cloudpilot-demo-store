@@ -1,7 +1,7 @@
 import express from 'express';
 import { initTelemetry } from './telemetry';
 import { Logger } from './logger';
-import { initMetrics } from './metrics';
+import { initMetrics, recordHttpRequest } from './metrics';
 import { createOrderRoutes } from './routes';
 
 const SERVICE_NAME = 'order-service';
@@ -15,11 +15,13 @@ const app = express();
 
 app.use(express.json());
 
-// Request logging middleware
+// Request logging and HTTP metrics middleware
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     if (req.path !== '/metrics' && req.path !== '/health' && req.path !== '/ready') {
+      const route = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : req.path;
+      recordHttpRequest(route, req.method, res.statusCode);
       logger.info(`${req.method} ${req.path} ${res.statusCode}`, {
         method: req.method,
         path: req.path,

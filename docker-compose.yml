@@ -38,7 +38,6 @@ services:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
       - "127.0.0.1:16686:16686"
-      - "4317"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:16686/ | grep -q 'Jaeger UI'"]
       interval: 5s
@@ -81,6 +80,38 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.29.1
+    container_name: demo-store-blackbox-exporter
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox_exporter/config.yml"]
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
+  grafana:
+    image: grafana/grafana:13.3.1
+    container_name: demo-store-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in the current process environment}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: light
+    ports:
+      - "127.0.0.1:3002:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
 
   product-service:
     build:
@@ -165,3 +196,6 @@ services:
         condition: service_started
       loki:
         condition: service_healthy
+
+volumes:
+  grafana_data:
