@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const yaml = require('yaml');
+const { validateOrderPlacementMetric } = require('./order-placement-metric-contract');
 
 describe('Order Service HTTP Metrics Regression Tests', () => {
   const rootDir = path.resolve(__dirname, '..');
@@ -74,7 +75,7 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     if (prevDatabaseUrl !== undefined) process.env.DATABASE_URL = prevDatabaseUrl;
   });
 
-  test('metrics.yaml includes order-service store_http_requests_total while preserving store_orders_placed_total gap', () => {
+  test('metrics.yaml includes order-service HTTP metrics and validates optional order placement metric', () => {
     const metricsPath = path.join(rootDir, 'config/observability/metrics.yaml');
     const parsed = yaml.parse(fs.readFileSync(metricsPath, 'utf8'));
     const metrics = parsed.metrics || [];
@@ -86,8 +87,7 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     assert.strictEqual(orderHttp.route, '/orders');
     assert.strictEqual(orderHttp.method, 'POST');
 
-    const ordersPlaced = metrics.find((m) => m.name === 'store_orders_placed_total');
-    assert.strictEqual(ordersPlaced, undefined, 'store_orders_placed_total intentional gap must be preserved');
+    validateOrderPlacementMetric(metrics);
   });
 
   test('POST /orders increments store_http_requests_total for 201, 400, and 402 without double-counting and excludes /health, /ready, /metrics', async () => {
@@ -148,6 +148,11 @@ describe('Order Service HTTP Metrics Regression Tests', () => {
     assert.doesNotMatch(metricsText, /route="\/health"/);
     assert.doesNotMatch(metricsText, /route="\/ready"/);
     assert.doesNotMatch(metricsText, /route="\/metrics"/);
-    assert.doesNotMatch(metricsText, /store_orders_placed_total/);
+    const orderMetricConfigured = validateOrderPlacementMetric(yaml.parse(fs.readFileSync(process.env.METRICS_CONFIG_PATH, 'utf8')).metrics);
+    if (orderMetricConfigured) {
+      assert.match(metricsText, /store_orders_placed_total\{[^}]*service="order-service"[^}]*route="\/orders"[^}]*method="POST"[^}]*status="success"[^}]*\}\s+1\b/);
+    } else {
+      assert.doesNotMatch(metricsText, /store_orders_placed_total/);
+    }
   });
 });

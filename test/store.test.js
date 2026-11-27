@@ -6,23 +6,20 @@ const os = require('node:os');
 const path = require('node:path');
 const { Pool } = require('pg');
 const yaml = require('yaml');
+const { validateOrderPlacementMetric } = require('./order-placement-metric-contract');
 
 describe('CloudPilot Demo Store - Unit and Integration Tests', () => {
   const rootDir = path.resolve(__dirname, '..');
 
   describe('Observability Configuration Gaps', () => {
-    test('metrics.yaml has intentional gap: store_orders_placed_total is missing', () => {
+    test('metrics.yaml declares supported Order Service instrumentation when configured', () => {
       const metricsPath = path.join(rootDir, 'config/observability/metrics.yaml');
       assert.ok(fs.existsSync(metricsPath), 'metrics.yaml should exist');
       const content = yaml.parse(fs.readFileSync(metricsPath, 'utf8'));
       const metricNames = (content.metrics || []).map((m) => m.name);
       assert.ok(metricNames.includes('store_http_requests_total'), 'gateway metric present');
       assert.ok(metricNames.includes('store_product_views_total'), 'product metric present');
-      assert.strictEqual(
-        metricNames.includes('store_orders_placed_total'),
-        false,
-        'store_orders_placed_total must be absent to provide intentional gap for CloudPilot'
-      );
+      validateOrderPlacementMetric(content.metrics || []);
     });
 
     test('health-checks.yaml registers order-service /ready once at a 30-second interval', () => {

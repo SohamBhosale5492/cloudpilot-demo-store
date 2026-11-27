@@ -25,6 +25,5 @@ metrics:
       route: /orders
       method: POST
 
-# Intentional Observability Gap:
-# The order placement counter 'store_orders_placed_total' for order-service route '/orders' (method: POST)
-# is intentionally absent from this configuration, allowing CloudPilot's gap engine to detect it as a gap.
+# The order placement counter is enabled only when its order-service entry is
+# declared above. CloudPilot evaluates its absence until an approved patch adds it.
