@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { handleHealth, handleReady, isHealthEndpointConfigured } from './health';
 import { getMetricsRegister, recordHttpRequest } from './metrics';
 import { injectChaos, resetChaos, getChaosConfig, applyChaosMiddleware } from './chaos';
-import { startSpanFromRequest, injectTraceContext } from './telemetry';
-import { Logger } from './logger';
+import { runWithRequestSpan, injectTraceContext } from './telemetry';
+import { Logger, injectCorrelationHeader } from './logger';
 
 export function createGatewayRoutes(logger: Logger): Router {
   const router = Router();
@@ -60,148 +60,179 @@ export function createGatewayRoutes(logger: Logger): Router {
 
   // Product Catalog Gateway Proxy
   router.get('/api/products', async (req: Request, res: Response) => {
-    const { span, end } = startSpanFromRequest('api-gateway', 'GET /api/products', req.headers);
+    return runWithRequestSpan(
+      'api-gateway',
+      'GET /api/products',
+      req.headers,
+      async () => {
+        const chaos = await applyChaosMiddleware();
+        if (chaos.shouldFail500) {
+          recordHttpRequest('/api/products', 'GET', 500);
+          logger.error('Injected Chaos 500 Fault on /api/products');
+          return res.status(500).json({ error: chaos.errorMsg });
+        }
 
-    // Chaos evaluation
-    const chaos = await applyChaosMiddleware();
-    if (chaos.shouldFail500) {
-      recordHttpRequest('/api/products', 'GET', 500);
-      logger.error('Injected Chaos 500 Fault on /api/products');
-      end();
-      return res.status(500).json({ error: chaos.errorMsg });
-    }
+        try {
+          const outgoingHeaders: Record<string, string> = { Accept: 'application/json' };
+          injectTraceContext(outgoingHeaders);
+          injectCorrelationHeader(outgoingHeaders);
 
-    try {
-      const outgoingHeaders: Record<string, string> = { 'Accept': 'application/json' };
-      injectTraceContext(outgoingHeaders);
+          const upstreamRes = await fetch(`${productServiceUrl}/products`, {
+            headers: outgoingHeaders,
+          });
 
-      const upstreamRes = await fetch(`${productServiceUrl}/products`, {
-        headers: outgoingHeaders,
-      });
-
-      const data = await upstreamRes.json();
-      recordHttpRequest('/api/products', 'GET', upstreamRes.status);
-      end();
-      return res.status(upstreamRes.status).json(data);
-    } catch (err: any) {
-      recordHttpRequest('/api/products', 'GET', 502);
-      logger.error('Gateway failed to forward /api/products', { error: err.message });
-      end();
-      return res.status(502).json({ error: 'Product service unreachable' });
-    }
+          const data = await upstreamRes.json();
+          recordHttpRequest('/api/products', 'GET', upstreamRes.status);
+          return res.status(upstreamRes.status).json(data);
+        } catch (err: any) {
+          recordHttpRequest('/api/products', 'GET', 502);
+          logger.error('Gateway failed to forward /api/products', { error: err.message });
+          return res.status(502).json({ error: 'Product service unreachable' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   router.get('/api/products/:id', async (req: Request, res: Response) => {
     const productId = req.params.id;
-    const { span, end } = startSpanFromRequest('api-gateway', `GET /api/products/${productId}`, req.headers);
+    return runWithRequestSpan(
+      'api-gateway',
+      `GET /api/products/${productId}`,
+      req.headers,
+      async () => {
+        const chaos = await applyChaosMiddleware();
+        if (chaos.shouldFail500) {
+          recordHttpRequest(`/api/products/${productId}`, 'GET', 500);
+          logger.error(`Injected Chaos 500 Fault on /api/products/${productId}`);
+          return res.status(500).json({ error: chaos.errorMsg });
+        }
 
-    const chaos = await applyChaosMiddleware();
-    if (chaos.shouldFail500) {
-      recordHttpRequest(`/api/products/${productId}`, 'GET', 500);
-      logger.error(`Injected Chaos 500 Fault on /api/products/${productId}`);
-      end();
-      return res.status(500).json({ error: chaos.errorMsg });
-    }
+        try {
+          const outgoingHeaders: Record<string, string> = { Accept: 'application/json' };
+          injectTraceContext(outgoingHeaders);
+          injectCorrelationHeader(outgoingHeaders);
 
-    try {
-      const outgoingHeaders: Record<string, string> = { 'Accept': 'application/json' };
-      injectTraceContext(outgoingHeaders);
+          const upstreamRes = await fetch(`${productServiceUrl}/products/${productId}`, {
+            headers: outgoingHeaders,
+          });
 
-      const upstreamRes = await fetch(`${productServiceUrl}/products/${productId}`, {
-        headers: outgoingHeaders,
-      });
-
-      const data = await upstreamRes.json();
-      recordHttpRequest(`/api/products/${productId}`, 'GET', upstreamRes.status);
-      end();
-      return res.status(upstreamRes.status).json(data);
-    } catch (err: any) {
-      recordHttpRequest(`/api/products/${productId}`, 'GET', 502);
-      logger.error(`Gateway failed to forward /api/products/${productId}`, { error: err.message });
-      end();
-      return res.status(502).json({ error: 'Product service unreachable' });
-    }
+          const data = await upstreamRes.json();
+          recordHttpRequest(`/api/products/${productId}`, 'GET', upstreamRes.status);
+          return res.status(upstreamRes.status).json(data);
+        } catch (err: any) {
+          recordHttpRequest(`/api/products/${productId}`, 'GET', 502);
+          logger.error(`Gateway failed to forward /api/products/${productId}`, { error: err.message });
+          return res.status(502).json({ error: 'Product service unreachable' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   // Order Gateway Proxy
   router.post('/api/orders', async (req: Request, res: Response) => {
-    const { span, end } = startSpanFromRequest('api-gateway', 'POST /api/orders', req.headers);
+    return runWithRequestSpan(
+      'api-gateway',
+      'POST /api/orders',
+      req.headers,
+      async () => {
+        const chaos = await applyChaosMiddleware();
+        if (chaos.shouldFail500) {
+          recordHttpRequest('/api/orders', 'POST', 500);
+          logger.error('Injected Chaos 500 Fault on /api/orders');
+          return res.status(500).json({ error: chaos.errorMsg });
+        }
 
-    const chaos = await applyChaosMiddleware();
-    if (chaos.shouldFail500) {
-      recordHttpRequest('/api/orders', 'POST', 500);
-      logger.error('Injected Chaos 500 Fault on /api/orders');
-      end();
-      return res.status(500).json({ error: chaos.errorMsg });
-    }
+        try {
+          const outgoingHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+          injectTraceContext(outgoingHeaders);
+          injectCorrelationHeader(outgoingHeaders);
 
-    try {
-      const outgoingHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      injectTraceContext(outgoingHeaders);
+          const upstreamRes = await fetch(`${orderServiceUrl}/orders`, {
+            method: 'POST',
+            headers: outgoingHeaders,
+            body: JSON.stringify(req.body),
+          });
 
-      const upstreamRes = await fetch(`${orderServiceUrl}/orders`, {
-        method: 'POST',
-        headers: outgoingHeaders,
-        body: JSON.stringify(req.body),
-      });
-
-      const data = await upstreamRes.json();
-      recordHttpRequest('/api/orders', 'POST', upstreamRes.status);
-      end();
-      return res.status(upstreamRes.status).json(data);
-    } catch (err: any) {
-      recordHttpRequest('/api/orders', 'POST', 502);
-      logger.error('Gateway failed to forward /api/orders', { error: err.message });
-      end();
-      return res.status(502).json({ error: 'Order service unreachable' });
-    }
+          const data = await upstreamRes.json();
+          recordHttpRequest('/api/orders', 'POST', upstreamRes.status);
+          return res.status(upstreamRes.status).json(data);
+        } catch (err: any) {
+          recordHttpRequest('/api/orders', 'POST', 502);
+          logger.error('Gateway failed to forward /api/orders', { error: err.message });
+          return res.status(502).json({ error: 'Order service unreachable' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   router.get('/api/orders/:id', async (req: Request, res: Response) => {
     const orderId = req.params.id;
-    const { span, end } = startSpanFromRequest('api-gateway', `GET /api/orders/${orderId}`, req.headers);
+    return runWithRequestSpan(
+      'api-gateway',
+      `GET /api/orders/${orderId}`,
+      req.headers,
+      async () => {
+        try {
+          const outgoingHeaders: Record<string, string> = { Accept: 'application/json' };
+          injectTraceContext(outgoingHeaders);
+          injectCorrelationHeader(outgoingHeaders);
 
-    try {
-      const outgoingHeaders: Record<string, string> = { 'Accept': 'application/json' };
-      injectTraceContext(outgoingHeaders);
+          const upstreamRes = await fetch(`${orderServiceUrl}/orders/${orderId}`, {
+            headers: outgoingHeaders,
+          });
 
-      const upstreamRes = await fetch(`${orderServiceUrl}/orders/${orderId}`, {
-        headers: outgoingHeaders,
-      });
-
-      const data = await upstreamRes.json();
-      recordHttpRequest(`/api/orders/${orderId}`, 'GET', upstreamRes.status);
-      end();
-      return res.status(upstreamRes.status).json(data);
-    } catch (err: any) {
-      recordHttpRequest(`/api/orders/${orderId}`, 'GET', 502);
-      logger.error(`Gateway failed to forward /api/orders/${orderId}`, { error: err.message });
-      end();
-      return res.status(502).json({ error: 'Order service unreachable' });
-    }
+          const data = await upstreamRes.json();
+          recordHttpRequest(`/api/orders/${orderId}`, 'GET', upstreamRes.status);
+          return res.status(upstreamRes.status).json(data);
+        } catch (err: any) {
+          recordHttpRequest(`/api/orders/${orderId}`, 'GET', 502);
+          logger.error(`Gateway failed to forward /api/orders/${orderId}`, { error: err.message });
+          return res.status(502).json({ error: 'Order service unreachable' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   router.get('/api/orders', async (req: Request, res: Response) => {
-    const { span, end } = startSpanFromRequest('api-gateway', 'GET /api/orders', req.headers);
+    return runWithRequestSpan(
+      'api-gateway',
+      'GET /api/orders',
+      req.headers,
+      async () => {
+        try {
+          const outgoingHeaders: Record<string, string> = { Accept: 'application/json' };
+          injectTraceContext(outgoingHeaders);
+          injectCorrelationHeader(outgoingHeaders);
 
-    try {
-      const outgoingHeaders: Record<string, string> = { 'Accept': 'application/json' };
-      injectTraceContext(outgoingHeaders);
+          const upstreamRes = await fetch(`${orderServiceUrl}/orders`, {
+            headers: outgoingHeaders,
+          });
 
-      const upstreamRes = await fetch(`${orderServiceUrl}/orders`, {
-        headers: outgoingHeaders,
-      });
-
-      const data = await upstreamRes.json();
-      recordHttpRequest('/api/orders', 'GET', upstreamRes.status);
-      end();
-      return res.status(upstreamRes.status).json(data);
-    } catch (err: any) {
-      recordHttpRequest('/api/orders', 'GET', 502);
-      logger.error('Gateway failed to forward /api/orders', { error: err.message });
-      end();
-      return res.status(502).json({ error: 'Order service unreachable' });
-    }
+          const data = await upstreamRes.json();
+          recordHttpRequest('/api/orders', 'GET', upstreamRes.status);
+          return res.status(upstreamRes.status).json(data);
+        } catch (err: any) {
+          recordHttpRequest('/api/orders', 'GET', 502);
+          logger.error('Gateway failed to forward /api/orders', { error: err.message });
+          return res.status(502).json({ error: 'Order service unreachable' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   return router;

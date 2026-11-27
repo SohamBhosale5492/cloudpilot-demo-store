@@ -1,0 +1,42 @@
+# cloudpilot:logging
+logging:
+  format: json
+  service_label: service
+  required_fields:
+    - timestamp
+    - level
+    - service
+    - message
+
+services:
+  api-gateway:
+    enabled: true
+    structured_json: true
+    required_fields:
+      - timestamp
+      - level
+      - service
+      - message
+      - correlation_id
+  product-service:
+    enabled: true
+    structured_json: true
+    required_fields:
+      - timestamp
+      - level
+      - service
+      - message
+      - correlation_id
+  order-service:
+    enabled: true
+    structured_json: true
+    required_fields:
+      - timestamp
+      - level
+      - service
+      - message
+
+# Intentional Observability Gap:
+# Structured logging for 'order-service' intentionally omits 'correlation_id'
+# from services.order-service.required_fields. Order Service emits JSON logs
+# without correlation_id until CloudPilot's log remediation patch declares it.

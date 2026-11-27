@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getAllProducts, getProductById, reserveProductStock } from './db';
 import { handleHealth, handleReady, isHealthEndpointConfigured } from './health';
 import { getMetricsRegister, recordProductView } from './metrics';
-import { startSpanFromRequest } from './telemetry';
+import { runWithRequestSpan } from './telemetry';
 import { Logger } from './logger';
 
 export function createProductRoutes(logger: Logger): Router {
@@ -41,63 +41,81 @@ export function createProductRoutes(logger: Logger): Router {
 
   // Product Catalog
   router.get('/products', async (req: Request, res: Response) => {
-    const { span, end } = startSpanFromRequest('product-service', 'GET /products', req.headers);
-    try {
-      const products = await getAllProducts();
-      recordProductView('/products', 'GET', 'all');
-      logger.info('Products listed successfully', { count: products.length });
-      end();
-      return res.json(products);
-    } catch (err: any) {
-      logger.error('Failed to list products', { error: err.message });
-      end();
-      return res.status(500).json({ error: 'Failed to list products' });
-    }
+    return runWithRequestSpan(
+      'product-service',
+      'GET /products',
+      req.headers,
+      async () => {
+        try {
+          const products = await getAllProducts();
+          recordProductView('/products', 'GET', 'all');
+          logger.info('Products listed successfully', { count: products.length });
+          return res.json(products);
+        } catch (err: any) {
+          logger.error('Failed to list products', { error: err.message });
+          return res.status(500).json({ error: 'Failed to list products' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   router.get('/products/:id', async (req: Request, res: Response) => {
     const productId = req.params.id;
-    const { span, end } = startSpanFromRequest('product-service', `GET /products/${productId}`, req.headers);
-    try {
-      const product = await getProductById(productId);
-      if (!product) {
-        logger.warn('Product not found', { productId });
-        end();
-        return res.status(404).json({ error: `Product ${productId} not found` });
-      }
+    return runWithRequestSpan(
+      'product-service',
+      `GET /products/${productId}`,
+      req.headers,
+      async () => {
+        try {
+          const product = await getProductById(productId);
+          if (!product) {
+            logger.warn('Product not found', { productId });
+            return res.status(404).json({ error: `Product ${productId} not found` });
+          }
 
-      recordProductView('/products', 'GET', productId);
-      logger.info('Product retrieved', { productId, name: product.name, price: product.price });
-      end();
-      return res.json(product);
-    } catch (err: any) {
-      logger.error('Error fetching product', { productId, error: err.message });
-      end();
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+          recordProductView('/products', 'GET', productId);
+          logger.info('Product retrieved', { productId, name: product.name, price: product.price });
+          return res.json(product);
+        } catch (err: any) {
+          logger.error('Error fetching product', { productId, error: err.message });
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
+      }
+    );
   });
 
   router.post('/products/:id/reserve', async (req: Request, res: Response) => {
     const productId = req.params.id;
     const quantity = Number(req.body?.quantity || 1);
-    const { span, end } = startSpanFromRequest('product-service', `POST /products/${productId}/reserve`, req.headers);
+    return runWithRequestSpan(
+      'product-service',
+      `POST /products/${productId}/reserve`,
+      req.headers,
+      async () => {
+        try {
+          const outcome = await reserveProductStock(productId, quantity);
+          if (!outcome.success) {
+            logger.warn('Insufficient stock for reservation', { productId, requested: quantity });
+            return res.status(409).json({ error: 'Insufficient stock or product unavailable', remainingStock: outcome.remainingStock });
+          }
 
-    try {
-      const outcome = await reserveProductStock(productId, quantity);
-      if (!outcome.success) {
-        logger.warn('Insufficient stock for reservation', { productId, requested: quantity });
-        end();
-        return res.status(409).json({ error: 'Insufficient stock or product unavailable', remainingStock: outcome.remainingStock });
+          logger.info('Product stock reserved', { productId, quantity, remainingStock: outcome.remainingStock });
+          return res.json({ success: true, productId, reserved: quantity, remainingStock: outcome.remainingStock });
+        } catch (err: any) {
+          logger.error('Failed to reserve stock', { productId, error: err.message });
+          return res.status(500).json({ error: 'Failed to reserve stock' });
+        }
+      },
+      (traceCtx) => {
+        res.locals.traceContext = traceCtx;
       }
-
-      logger.info('Product stock reserved', { productId, quantity, remainingStock: outcome.remainingStock });
-      end();
-      return res.json({ success: true, productId, reserved: quantity, remainingStock: outcome.remainingStock });
-    } catch (err: any) {
-      logger.error('Failed to reserve stock', { productId, error: err.message });
-      end();
-      return res.status(500).json({ error: 'Failed to reserve stock' });
-    }
+    );
   });
 
   return router;

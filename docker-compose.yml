@@ -30,14 +30,31 @@ services:
       timeout: 3s
       retries: 10
 
+  jaeger-storage-init:
+    image: postgres:16-alpine
+    container_name: demo-store-jaeger-storage-init
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /badger/key /badger/data && chown -R 10001:10001 /badger"]
+    volumes:
+      - jaeger_data:/badger
+
   jaeger:
     image: jaegertracing/all-in-one:1.55
     container_name: demo-store-jaeger
     restart: unless-stopped
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: "false"
+      BADGER_DIRECTORY_VALUE: /badger/data
+      BADGER_DIRECTORY_KEY: /badger/key
     ports:
       - "127.0.0.1:16686:16686"
+    volumes:
+      - jaeger_data:/badger
+    depends_on:
+      jaeger-storage-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:16686/ | grep -q 'Jaeger UI'"]
       interval: 5s
@@ -127,6 +144,7 @@ services:
       METRICS_CONFIG_PATH: /app/config/observability/metrics.yaml
       HEALTH_CONFIG_PATH: /app/config/observability/health-checks.yaml
       TRACING_CONFIG_PATH: /app/config/observability/tracing.yaml
+      LOGGING_CONFIG_PATH: /app/config/observability/logging.yaml
     volumes:
       - ./config/observability:/app/config/observability
     ports:
@@ -154,6 +172,7 @@ services:
       METRICS_CONFIG_PATH: /app/config/observability/metrics.yaml
       HEALTH_CONFIG_PATH: /app/config/observability/health-checks.yaml
       TRACING_CONFIG_PATH: /app/config/observability/tracing.yaml
+      LOGGING_CONFIG_PATH: /app/config/observability/logging.yaml
     volumes:
       - ./config/observability:/app/config/observability
     ports:
@@ -183,6 +202,7 @@ services:
       METRICS_CONFIG_PATH: /app/config/observability/metrics.yaml
       HEALTH_CONFIG_PATH: /app/config/observability/health-checks.yaml
       TRACING_CONFIG_PATH: /app/config/observability/tracing.yaml
+      LOGGING_CONFIG_PATH: /app/config/observability/logging.yaml
     volumes:
       - ./config/observability:/app/config/observability
     ports:
@@ -199,3 +219,4 @@ services:
 
 volumes:
   grafana_data:
+  jaeger_data:

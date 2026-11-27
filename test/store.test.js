@@ -31,11 +31,34 @@ describe('CloudPilot Demo Store - Unit and Integration Tests', () => {
       assert.deepStrictEqual(orderReady, [{ service: 'order-service', endpoint: '/ready', interval_seconds: 30 }]);
     });
 
-    test('tracing.yaml has intentional gap: order-service is disabled', () => {
+    test('tracing.yaml declares an explicit Order Service enablement state', () => {
       const tracingPath = path.join(rootDir, 'config/observability/tracing.yaml');
       assert.ok(fs.existsSync(tracingPath), 'tracing.yaml should exist');
       const content = yaml.parse(fs.readFileSync(tracingPath, 'utf8'));
-      assert.strictEqual(content.services?.['order-service']?.enabled, false, 'order-service tracing must be disabled');
+      assert.strictEqual(typeof content.services?.['order-service']?.enabled, 'boolean', 'order-service tracing must explicitly declare enablement');
+      assert.strictEqual(content.tracing.enabled, true);
+      assert.ok(content.tracing.propagators.includes('tracecontext'));
+      assert.ok(content.tracing.propagators.includes('baggage'));
+      assert.strictEqual(new URL(content.tracing.otlp_endpoint).pathname, '/v1/traces');
+    });
+
+    test('logging.yaml declares structured JSON logging and preserves service entries', () => {
+      const loggingPath = path.join(rootDir, 'config/observability/logging.yaml');
+      assert.ok(fs.existsSync(loggingPath), 'logging.yaml should exist');
+      const content = yaml.parse(fs.readFileSync(loggingPath, 'utf8'));
+      assert.strictEqual(content.logging?.format, 'json', 'logging.format must be json');
+      assert.strictEqual(content.logging?.service_label, 'service', 'logging.service_label must be service');
+      const orderLogging = content.services?.['order-service'];
+      assert.ok(orderLogging && typeof orderLogging === 'object', 'order-service logging entry must exist');
+      assert.strictEqual(orderLogging.enabled, true);
+      assert.strictEqual(orderLogging.structured_json, true);
+      assert.ok(Array.isArray(orderLogging.required_fields), 'order-service required_fields must be an array');
+      for (const baseField of ['timestamp', 'level', 'service', 'message']) {
+        assert.ok(orderLogging.required_fields.includes(baseField), `order-service must declare base field ${baseField}`);
+      }
+      // Valid in both baseline (correlation_id absent) and remediated (correlation_id present) states
+      const uniqueFields = new Set(orderLogging.required_fields);
+      assert.strictEqual(uniqueFields.size, orderLogging.required_fields.length, 'required_fields must not contain duplicates');
     });
 
     test('alert-rules.yaml contains the remediated Order Service heartbeat alert exactly once', () => {
@@ -61,7 +84,7 @@ describe('CloudPilot Demo Store - Unit and Integration Tests', () => {
     const previousEnv = {};
     const envKeys = [
       'PORT', 'PRODUCT_SERVICE_URL', 'ORDER_SERVICE_URL', 'DATABASE_URL', 'LOKI_PUSH_URL',
-      'HEALTH_CONFIG_PATH', 'METRICS_CONFIG_PATH', 'TRACING_CONFIG_PATH',
+      'HEALTH_CONFIG_PATH', 'METRICS_CONFIG_PATH', 'TRACING_CONFIG_PATH', 'LOGGING_CONFIG_PATH',
     ];
 
     async function boundUrl(server) {
@@ -74,6 +97,7 @@ describe('CloudPilot Demo Store - Unit and Integration Tests', () => {
       process.env.PORT = '0';
       process.env.HEALTH_CONFIG_PATH = path.join(rootDir, 'config/observability/health-checks.yaml');
       process.env.METRICS_CONFIG_PATH = path.join(rootDir, 'config/observability/metrics.yaml');
+      process.env.LOGGING_CONFIG_PATH = path.join(rootDir, 'config/observability/logging.yaml');
       delete process.env.DATABASE_URL;
       delete process.env.LOKI_PUSH_URL;
       tracingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'demo-store-test-tracing-'));
