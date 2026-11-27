@@ -24,6 +24,15 @@ metrics:
       service: order-service
       route: /orders
       method: POST
+  - name: store_orders_placed_total
+    service: order-service
+    route: /orders
+    method: POST
+    labels:
+      service: order-service
+      route: /orders
+      method: POST
+    # cloudpilot:remediated:CP-RULE-OBS-GAP-METRIC-PRESENT
 
 # The order placement counter is enabled only when its order-service entry is
 # declared above. CloudPilot evaluates its absence until an approved patch adds it.
