@@ -35,6 +35,7 @@ services:
       - level
       - service
       - message
+      - correlation_id
 
 # Intentional Observability Gap:
 # Structured logging for 'order-service' intentionally omits 'correlation_id'
