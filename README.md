@@ -249,6 +249,23 @@ PostgreSQL is pre-seeded with 5 products:
 | prod-4 | UltraView 4K IPS Monitor | $499.99 | Displays |
 | prod-5 | ThunderDock Pro Hub | $199.99 | Accessories |
 
+## Simplified Local Deployment (Preserving Data & Monitoring History)
+
+After merging a CloudPilot remediation PR on GitHub, deploy the updated `main` revision cleanly with one command:
+
+```powershell
+# Sync main (ff-only), reload config / restart only affected app services, and verify readiness
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Deploy-DemoStore.ps1
+
+# Deploy and generate bounded real demo traffic for immediate Prometheus / Loki / Jaeger verification
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Deploy-DemoStore.ps1 -GenerateTraffic
+```
+
+`Deploy-DemoStore.ps1`:
+- Verifies `origin` (`SohamBhosale5492/cloudpilot-demo-store`) and clean `main` branch (never auto-merges PRs).
+- Fast-forward pulls `origin/main`, reloads Prometheus rules via `/-/reload`, and rebuilds/restarts only affected application containers (`api-gateway`, `product-service`, `order-service`).
+- Preserves PostgreSQL, Prometheus, Grafana, Jaeger Badger, and Loki volumes/data without recreating stateful containers.
+
 ## Stopping / Cleanup
 
 ```bash

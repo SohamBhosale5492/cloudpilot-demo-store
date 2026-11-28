@@ -10,6 +10,7 @@ services:
     ports:
       - "127.0.0.1:5439:5432"
     volumes:
+      - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d demostore"]
@@ -22,6 +23,8 @@ services:
     container_name: demo-store-loki
     restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
     ports:
       - "127.0.0.1:3100:3100"
     healthcheck:
@@ -88,6 +91,7 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
+      - prometheus_data:/prometheus
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/observability/alert-rules.yaml:/etc/prometheus/rules/alert-rules.yaml:ro
     depends_on:
@@ -218,5 +222,8 @@ services:
         condition: service_healthy
 
 volumes:
+  postgres_data:
+  loki_data:
+  prometheus_data:
   grafana_data:
   jaeger_data:
