@@ -14,7 +14,7 @@ services:
   product-service:
     enabled: true
   order-service:
-    enabled: false
+    enabled: true
 
 # Intentional Observability Gap:
 # Distributed tracing for 'order-service' is intentionally set to 'enabled: false'.
