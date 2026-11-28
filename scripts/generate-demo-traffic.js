@@ -59,10 +59,29 @@ async function main() {
   await request('/api/products/prod-1');
   await waitForScrape();
 
+  // If the container started fresh, a second order moves the labeled counter from 1 -> 2
+  // so Prometheus increase(...[300s]) reports >= 1 immediately in the scan window.
+  const initialOrderInc = (await sample('increase(store_http_requests_total{service="order-service",route="/orders",method="POST"}[300s])'))
+    .reduce((sum, result) => sum + Number(result.value[1]), 0);
+  if (initialOrderInc < 1) {
+    const secondResponse = await request('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerId: `cloudpilot-demo-${Date.now()}-b`,
+        items: [{ productId: 'prod-1', quantity: 1 }],
+        paymentMethod: 'credit_card'
+      })
+    });
+    if (secondResponse.status !== 201) throw new Error(`Second order returned HTTP ${secondResponse.status}`);
+    await waitForScrape();
+  }
+
   const selectors = [
     'store_http_requests_total{service="api-gateway",route="/api/products",method="GET"}',
     'store_product_views_total{service="product-service",route="/products",method="GET"}',
-    'store_http_requests_total{service="order-service",route="/orders",method="POST"}'
+    'store_http_requests_total{service="order-service",route="/orders",method="POST"}',
+    'store_orders_placed_total{service="order-service"}'
   ];
   for (const selector of selectors) {
     const results = await sample(`increase(${selector}[300s])`);
